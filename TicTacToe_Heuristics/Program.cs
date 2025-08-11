@@ -6,31 +6,6 @@ using System.Text;
 
 namespace TicTacToe_Heuristics
 {
-    /*
-    ====================================================================================================
-    OPGAVE BESKRIVELSE - TIC TAC TOE AI UDVIKLING
-    ====================================================================================================
-    
-    Step 1: Byg en AI der kan lave et tilfældigt træk. Lad denne AI være spiller 1.
-            Vind over din tilfældige AI i et spil
-            Bemærk dog at du skal finde ud af, hvad du gør, hvis din AI taber så meget, 
-            at den ikke kan gøre et træk
-    
-    Step 2: Byg en AI, der kopierer hexapawns måde at lære på.
-            Sæt en høj discovery i starten og lad den spille mod en tilfældig modstander ca. 200 spil.
-    
-    Step 3: Lav en AI til spiller 1 som bruger hexapawn måden at lære på og lad de to spil lære mod hinanden.
-            sæt discovery til 0 og se, hvor hurtigt de konsekvent spiller lige op mod hinanden.
-    
-    ====================================================================================================
-    CURRENT IMPLEMENTATION STATUS: STEP 2 - LEARNING AI VS RANDOM AI
-    ====================================================================================================
-    - Player 1: Random AI (X)
-    - Player 2: Learning AI (O) - Uses hexapawn-style learning by removing losing moves
-    - Running 20,000 games to train the learning AI
-    ====================================================================================================
-    */
-
     class Program
     {
         /*
@@ -45,14 +20,11 @@ namespace TicTacToe_Heuristics
 
         /*
         ================================================================================
-        LEARNING AI VARIABLES (HEXAPAWN-STYLE)
+        HEURISTIC LEARNING AI VARIABLES
         ================================================================================
         */
-
-        //istedet for int skal det være object med en float value
         static Dictionary<string, List<Move>> MovesAtBoardState = new Dictionary<string, List<Move>>();
-        static int lastPlayer2MoveIndex = -1;
-        static string lastPlayer2BoardState = null;
+        static List<(string boardState, int moveIndex)> player2MoveHistory = new List<(string, int)>();
 
         /*
         ================================================================================
@@ -64,159 +36,288 @@ namespace TicTacToe_Heuristics
         static int timesPlayer1Won = 0;
         static int timesPlayer2Won = 0;
 
+
         static void Main(string[] args)
         {
             /*
-            ============================================================================
-            MAIN GAME LOOP - 20,000 TRAINING GAMES
-            ============================================================================
+            =========================================================================
+            MAIN GAME LOOP - TRAINING GAMES WITH PROGRESS TRACKING
+            =========================================================================
             */
-            for (int i = 0; i < 20000; i++)
+            
+            // Track results for different phases
+            var phaseResults = new List<(string phaseName, int totalGames, int player1Wins, int player2Wins, int draws)>();
+            
+            // Training phases configuration
+            var trainingPhases = new[]
             {
-                // Reset game state for new game
-                arr = (char[])Permanent.Clone();
-                player = 1;
-                flag = 0;
-                timesPlayed++;
+                ("Initial Learning", 5000),
+                ("2nd Learning", 5000), 
+                ("3rd Learning", 5000),
+                ("4th Learning", 5000),
+                ("Final Phase", 5000)
 
-                /*
-                ========================================================================
-                SINGLE GAME LOOP
-                ========================================================================
-                */
-                do
+            };
+            
+            int totalGamesPlayed = 0;
+            
+            foreach (var (phaseName, gameCount) in trainingPhases)
+            {
+                // Reset counters for this phase
+                timesPlayed = 0;
+                timesDrawn = 0;
+                timesPlayer1Won = 0;
+                timesPlayer2Won = 0;
+                
+                // Run games for this phase
+                for (int i = 0; i < gameCount; i++)
                 {
-                    if (player % 2 == 0)
-                    {
-                        /*
-                        ================================================================
-                        PLAYER 2 TURN - LEARNING AI (O)
-                        ================================================================
-                        */
-                        string boardState = GetBoardStateString();
-
-                        if (!MovesAtBoardState.ContainsKey(boardState))
-                        {
-                            List<char> availableMoves = arr.Where(x => x != 'X' && x != 'O' && x != '0').ToList();
-                            MovesAtBoardState[boardState] = availableMoves.Select(x => int.Parse(x.ToString())).ToList();
-                        }
-                        var moveList = MovesAtBoardState[boardState];
-                        if (moveList.Count > 0)
-                        {
-                            int moveIndex = RND.Range(0, moveList.Count);
-                            int boardPos = moveList[moveIndex];
-                            arr[boardPos] = 'O';
-                            lastPlayer2BoardState = boardState;
-                            lastPlayer2MoveIndex = moveIndex;
-                        }
-                        player++;
-                    }
-                    else
-                    {
-                        /*
-                        ================================================================
-                        PLAYER 1 TURN - RANDOM AI (X)
-                        ================================================================
-                        */
-                        List<char> moves = arr.Where(x => x != 'X' && x != 'O' && x != '0').ToList();
-                        if (moves.Count > 0)
-                        {
-                            int choice = RND.Range(0, moves.Count);
-                            int ting = int.Parse(moves[choice].ToString());
-                            arr[ting] = 'X';
-                        }
-                        player++;
-                    }
-
-                    flag = CheckWin();
+                    // Reset game state for new game
+                    arr = (char[])Permanent.Clone();
+                    player = 1;
+                    flag = 0;
+                    timesPlayed++;
+                    totalGamesPlayed++;
+                    player2MoveHistory.Clear();
 
                     /*
-                    ====================================================================
-                    PRE-POPULATE BOARD STATES FOR LEARNING AI
-                    ====================================================================
+                    ========================================================================
+                    SINGLE GAME LOOP
+                    ========================================================================
                     */
-                    if (flag == 0 && player % 2 == 0)
+                    do
                     {
-                        string boardState = GetBoardStateString();
-                        if (!MovesAtBoardState.ContainsKey(boardState))
+                        if (player % 2 == 0)
                         {
-                            List<char> availableMoves = arr.Where(x => x != 'X' && x != 'O' && x != '0').ToList();
-                            MovesAtBoardState[boardState] = availableMoves.Select(x => int.Parse(x.ToString())).ToList();
+                            /*
+                            ================================================================
+                            PLAYER 2 TURN - HEURISTIC LEARNING AI (O)
+                            ================================================================
+                            */
+                            string boardState = GetBoardStateString();
+
+                            if (!MovesAtBoardState.ContainsKey(boardState))
+                            {
+                                List<char> availableMoves = arr.Where(x => x != 'X' && x != 'O' && x != '0').ToList();
+                                MovesAtBoardState[boardState] = availableMoves.Select(x => new Move(int.Parse(x.ToString()), 1.0f)).ToList();
+                            }
+
+                            var moveList = MovesAtBoardState[boardState];
+                            if (moveList.Count > 0)
+                            {
+                                int moveIndex = SelectBestHeuristicMove(moveList);
+                                int boardPos = moveList[moveIndex].MovesMade;
+                                arr[boardPos] = 'O';
+                                
+                                // Track move history for heuristic updates
+                                player2MoveHistory.Add((boardState, moveIndex));
+                            }
+                            else
+                            {
+                                Console.WriteLine("Learning AI has no available moves!");
+                            }
+                            player++;
                         }
-                    }
-                }
-                while (flag != 1 && flag != -1);
+                        else
+                        {
+                            /*
+                            ================================================================
+                            PLAYER 1 TURN - RANDOM AI (X)
+                            ================================================================
+                            */
+                            List<char> moves = arr.Where(x => x != 'X' && x != 'O' && x != '0').ToList();
+                            if (moves.Count > 0)
+                            {
+                                int choice = RND.Range(0, moves.Count);
+                                int ting = int.Parse(moves[choice].ToString());
+                                arr[ting] = 'X';
+                            }
+                            player++;
+                        }
 
-                /*
-                ========================================================================
-                DEBUG OUTPUT (CURRENTLY ACTIVE - SHOULD BE REMOVED FOR TRAINING)
-                ========================================================================
-                */
-                Board();
-                int ShowWinner = (player % 2) + 1;
-                Console.WriteLine("Player {0} has won", ShowWinner);
-                Console.WriteLine("Draw");
+                        flag = CheckWin();
 
-                /*
-                ========================================================================
-                GAME RESULT PROCESSING & LEARNING
-                ========================================================================
-                */
-                if (flag == 1)
-                {
-                    int winner = (player % 2) + 1;
-
-                    string boardState = GetBoardStateString();
-                    if (!MovesAtBoardState.ContainsKey(boardState))
-                    {
-                        List<char> availableMoves = arr.Where(x => x != 'X' && x != 'O' && x != '0').ToList();
-                        MovesAtBoardState[boardState] = availableMoves.Select(x => int.Parse(x.ToString())).ToList();
-                    }
-
-                    if (winner == 1 && lastPlayer2BoardState != null)
-                    {
                         /*
-                        ================================================================
-                        LEARNING: REMOVE LOSING MOVE FROM PLAYER 2 (HEXAPAWN STYLE)
-                        ================================================================
+                        ====================================================================
+                        PRE-POPULATE BOARD STATES FOR HEURISTIC AI
+                        ====================================================================
                         */
-                        timesPlayer1Won++;
-                        var moveList = MovesAtBoardState[lastPlayer2BoardState];
-                        if (moveList.Count > lastPlayer2MoveIndex)
+                        if (flag == 0 && player % 2 == 0)
                         {
-                            moveList.RemoveAt(lastPlayer2MoveIndex);
+                            string boardState = GetBoardStateString();
+                            if (!MovesAtBoardState.ContainsKey(boardState))
+                            {
+                                List<char> availableMoves = arr.Where(x => x != 'X' && x != 'O' && x != '0').ToList();
+                                MovesAtBoardState[boardState] = availableMoves.Select(x => new Move(int.Parse(x.ToString()), 1.0f)).ToList();
+                            }
                         }
                     }
-                    else if (winner == 2)
+                    while (flag != 1 && flag != -1);
+
+                    /*
+                    ========================================================================
+                    GAME RESULT PROCESSING & HEURISTIC LEARNING
+                    ========================================================================
+                    */
+                    if (flag == 1)
                     {
-                        timesPlayer2Won++;
+                        int winner = (player % 2) + 1;
+
+                        if (winner == 1) // Player 2 (Learning AI) lost
+                        {
+                            timesPlayer1Won++;
+                            ApplyLosingHeuristics();
+                        }
+                        else if (winner == 2) // Player 2 (Learning AI) won
+                        {
+                            timesPlayer2Won++;
+                            ApplyWinningHeuristics();
+                        }
+                    }
+                    else if (flag == -1)
+                    {
+                        timesDrawn++;
                     }
                 }
-                else
-                {
-                    timesDrawn++;
-                }
+                
+                // Store results for this phase
+                phaseResults.Add((phaseName, timesPlayed, timesPlayer1Won, timesPlayer2Won, timesDrawn));
             }
 
             /*
             =========================================================================
-            FINAL STATISTICS OUTPUT
+            COMPREHENSIVE RESULTS DISPLAY
             =========================================================================
             */
-            Console.WriteLine("\nTotal games played: " + timesPlayed);
-            Console.WriteLine("Player 1 (AI) won: " + timesPlayer1Won + " times");
-            Console.WriteLine("Player 2 (Smart AI) won: " + timesPlayer2Won + " times");
-            Console.WriteLine("Draws: " + timesDrawn);
+            Console.WriteLine("\n" + new string('=', 80));
+            Console.WriteLine("TRAINING COMPLETE");
+            Console.WriteLine(new string('=', 80));
+            
+            // Display results for each phase
+            foreach (var (phaseName, totalGames, player1Wins, player2Wins, draws) in phaseResults)
+            {
+                Console.WriteLine($"\n{phaseName} ({totalGames} games):");
+                Console.WriteLine($"  Player 1 (Random AI) won: {player1Wins} times ({(double)player1Wins / totalGames * 100:F2}%)");
+                Console.WriteLine($"  Player 2 (Heuristic AI) won: {player2Wins} times ({(double)player2Wins / totalGames * 100:F2}%)");
+                Console.WriteLine($"  Draws: {draws} times ({(double)draws / totalGames * 100:F2}%)");
+            }
+            
+            // Display overall summary
+            int totalPlayer1Wins = phaseResults.Sum(r => r.player1Wins);
+            int totalPlayer2Wins = phaseResults.Sum(r => r.player2Wins);
+            int totalDraws = phaseResults.Sum(r => r.draws);
+            
+            Console.WriteLine($"\n{new string('-', 60)}");
+            Console.WriteLine($"OVERALL SUMMARY ({totalGamesPlayed} total games):");
+            Console.WriteLine($"  Player 1 (Random AI) won: {totalPlayer1Wins} times ({(double)totalPlayer1Wins / totalGamesPlayed * 100:F2}%)");
+            Console.WriteLine($"  Player 2 (Heuristic AI) won: {totalPlayer2Wins} times ({(double)totalPlayer2Wins / totalGamesPlayed * 100:F2}%)");
+            Console.WriteLine($"  Draws: {totalDraws} times ({(double)totalDraws / totalGamesPlayed * 100:F2}%)");
         }
 
+        /*
+        ================================================================================
+        HEURISTIC-BASED MOVE SELECTION
+        ================================================================================
+        */
+        private static int SelectBestHeuristicMove(List<Move> moveList)
+        {
+            // Find the move with the highest heuristic value
+            float bestHeuristic = float.MinValue;
+            foreach (Move move in moveList)
+            {
+                if (move.Heuristic > bestHeuristic)
+                {
+                    bestHeuristic = move.Heuristic;
+                }
+            }
+            
+            // Find all moves that have the best heuristic value
+            List<int> bestMoveIndices = new List<int>();
+            for (int i = 0; i < moveList.Count; i++)
+            {
+                if (Math.Abs(moveList[i].Heuristic - bestHeuristic) < 0.01f)
+                {
+                    bestMoveIndices.Add(i);
+                }
+            }
+            
+            // Return single best move or random selection from best moves
+            if (bestMoveIndices.Count == 1)
+            {
+                return bestMoveIndices[0];
+            }
+            else
+            {
+                return bestMoveIndices[RND.Range(0, bestMoveIndices.Count)];
+            }
+        }
+
+        /*
+        ================================================================================
+        HEURISTIC LEARNING METHODS
+        ================================================================================
+        */
+        private static void ApplyLosingHeuristics()
+        {
+            // Apply heuristic penalties for last move -0.9, second last -0.8, third last -0.7, and so on
+            for (int i = 0; i < player2MoveHistory.Count; i++)
+            {
+                var (boardState, moveIndex) = player2MoveHistory[player2MoveHistory.Count - 1 - i];
+                
+                if (MovesAtBoardState.ContainsKey(boardState) && 
+                    moveIndex < MovesAtBoardState[boardState].Count)
+                {
+                    float penalty = -0.9f + (i * 0.1f); // -0.9, -0.8, -0.7, -0.6, and so on
+                    var move = MovesAtBoardState[boardState][moveIndex];
+                    
+                    if (penalty < move.Heuristic)
+                    {
+                        move.Heuristic = penalty;
+                    }
+                }
+            }
+        }
+
+        private static void ApplyWinningHeuristics()
+        {
+            for (int i = 0; i < player2MoveHistory.Count; i++)
+            {
+                var (boardState, moveIndex) = player2MoveHistory[i];
+                
+                if (MovesAtBoardState.ContainsKey(boardState) && 
+                    moveIndex < MovesAtBoardState[boardState].Count)
+                {
+                    float reward = 0.1f + (i * 0.1f); // 0.1, 0.2, 0.3, and so on
+                    var move = MovesAtBoardState[boardState][moveIndex];
+                    
+                    if (reward > move.Heuristic)
+                    {
+                        move.Heuristic = reward;
+                    }
+                }
+            }
+        }
         /*
         ================================================================================
         UTILITY CLASSES & METHODS
         ================================================================================
         */
+
+        internal class Move
+        {
+            // Heuristic value for the move: last losing move gets -0.9, second last gets -0.8, third last gets -0.7, and so on!
+
+            public int MovesMade { get; set; }
+            public float Heuristic { get; set; }
+            public Move(int position, float value)
+            {
+                MovesMade = position;
+                Heuristic = value;
+            }
+        }
         public static class RND
         {
-            private static Random Rnd = new Random();
+            public static Random Rnd = new Random();
             public static int Range(int a, int b)
             {
                 return Rnd.Next(a, b);
@@ -278,16 +379,5 @@ namespace TicTacToe_Heuristics
         }
     }
 
-    internal class Move
-    {
-        public int MovesMade { get; set; }
 
-        //heuristic value for the move takes last loosing value and set it to - 0,9 second last loosing value to -0,8 third last loosing value to -0,7 and so on!
-        public float Heuristic { get; set; }
-        public Move(int position, float value)
-        {
-            MovesMade = position;
-            Heuristic = value;
-        }
-    }
 }
