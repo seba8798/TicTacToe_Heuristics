@@ -282,7 +282,7 @@ namespace TicTacToe_Heuristics
     {
         public int MovesMade { get; set; }
 
-        //heuristic value for the move takes last loosing value and set it to - 0,9 second last loosing value to -0,8 third last loosing value to -0,7 and so on
+        //heuristic value for the move takes last loosing value and set it to - 0,9 second last loosing value to -0,8 third last loosing value to -0,7 and so on!
         public float Heuristic { get; set; }
         public Move(int position, float value)
         {
